@@ -16,6 +16,7 @@
 		"@astrojs/mdx": "4.3.13",
 		"@astrojs/rss": "4.0.14",
 		"@astrojs/sitemap": "3.6.1",
+		"@sanity/client": "^7.18.0",
 		"astro": "5.16.9",
 		"typescript": "5.9.3"
 	},

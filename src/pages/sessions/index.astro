@@ -1,0 +1,122 @@
+---
+import BaseHead from '../../components/BaseHead.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { client, sanitizeSlug } from '../../lib/sanity';
+import { SITE_TITLE } from '../../consts';
+
+const sessions = await client.fetch(
+	`*[_type == "slot"] | order(title asc) {
+		_id, title, slug, slotType,
+		speakers[]->{ firstName, lastName, slug },
+		topics[]->{ title, slug }
+	}`
+);
+
+type Speaker = { firstName: string; lastName: string; slug: { current: string } };
+type Topic = { title: string; slug: { current: string } };
+type Session = {
+	_id: string;
+	title: string;
+	slug: { current: string };
+	slotType: string;
+	speakers: Speaker[];
+	topics: Topic[];
+};
+
+const typeOrder = ['talk', 'workshop', 'course'];
+const typeLabels: Record<string, string> = {
+	talk: 'Talks',
+	workshop: 'Workshops',
+	course: 'Courses',
+};
+
+const grouped = sessions.reduce((acc: Record<string, Session[]>, s: Session) => {
+	const type = s.slotType ?? 'talk';
+	(acc[type] ??= []).push(s);
+	return acc;
+}, {} as Record<string, Session[]>);
+
+const sortedGroups = typeOrder
+	.filter((t) => grouped[t]?.length)
+	.concat(Object.keys(grouped).filter((t) => !typeOrder.includes(t)));
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead
+			title={`Sessions — ${SITE_TITLE}`}
+			description="Conference talks, workshops, and courses"
+		/>
+		<style>
+			main {
+				max-width: 960px;
+				margin: 0 auto;
+				padding: 1rem 2rem;
+			}
+			h2 {
+				margin-top: 2.5rem;
+				padding-bottom: 0.4rem;
+				border-bottom: 2px solid #eee;
+			}
+			.sessions {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+			}
+			.sessions li {
+				padding: 0.6rem 0;
+				border-bottom: 1px solid #f0f0f0;
+			}
+			.sessions a {
+				font-weight: 600;
+				text-decoration: none;
+			}
+			.sessions a:hover {
+				text-decoration: underline;
+			}
+			.meta {
+				font-size: 0.85rem;
+				color: #666;
+				margin-top: 0.2rem;
+			}
+			.tag {
+				display: inline-block;
+				font-size: 0.72rem;
+				background: #eee;
+				border-radius: 4px;
+				padding: 0.1rem 0.35rem;
+				margin-left: 0.25rem;
+				color: #555;
+			}
+		</style>
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>Sessions</h1>
+			{sortedGroups.map((type) => (
+				<section>
+					<h2>{typeLabels[type] ?? type}</h2>
+					<ul class="sessions">
+						{grouped[type].map((s: Session) => (
+							<li>
+								<a href={`/sessions/${sanitizeSlug(s.slug.current)}/`}>
+									{s.title}
+								</a>
+								<div class="meta">
+									{s.speakers?.map((sp) => `${sp.firstName} ${sp.lastName}`).join(', ')}
+									{s.topics?.map((t) => (
+										<span class="tag">{t.title}</span>
+									))}
+								</div>
+							</li>
+						))}
+					</ul>
+				</section>
+			))}
+		</main>
+		<Footer />
+	</body>
+</html>

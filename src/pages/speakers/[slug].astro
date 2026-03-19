@@ -1,0 +1,167 @@
+---
+import BaseHead from '../../components/BaseHead.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { client, imageUrl, portableTextToHtml, sanitizeSlug } from '../../lib/sanity';
+
+export async function getStaticPaths() {
+	const speakers = await client.fetch(
+		`*[_type == "speaker" && defined(slug.current)] {
+			firstName, lastName, slug, company, twitter, portrait,
+			"position": position.en,
+			"bio": description.en,
+			"sessions": *[_type == "slot" && references(^._id)] | order(title asc) {
+				title, slug, slotType
+			}
+		}`
+	);
+	return speakers.map((speaker: any) => ({
+		params: { slug: speaker.slug.current },
+		props: { speaker },
+	}));
+}
+
+const { speaker } = Astro.props;
+const name = `${speaker.firstName} ${speaker.lastName}`;
+const portraitUrl = imageUrl(speaker.portrait, { w: 400, h: 400, fit: 'crop' });
+const bioHtml = portableTextToHtml(speaker.bio);
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead
+			title={name}
+			description={speaker.position ?? `Speaker: ${name}`}
+		/>
+		<style>
+			main {
+				max-width: 800px;
+				margin: 0 auto;
+				padding: 1rem 2rem;
+			}
+			.back {
+				display: inline-block;
+				margin-bottom: 1.5rem;
+				font-size: 0.9rem;
+			}
+			.speaker-header {
+				display: flex;
+				gap: 2rem;
+				align-items: flex-start;
+				margin-bottom: 2rem;
+			}
+			.speaker-header img {
+				width: 160px;
+				height: 160px;
+				border-radius: 50%;
+				object-fit: cover;
+				flex-shrink: 0;
+			}
+			.speaker-header h1 {
+				margin: 0 0 0.25rem;
+			}
+			.position {
+				color: #666;
+				margin: 0 0 0.5rem;
+			}
+			.meta a {
+				color: inherit;
+			}
+			.bio {
+				line-height: 1.75;
+			}
+			.bio p {
+				margin: 0 0 1rem;
+			}
+			.sessions {
+				margin-top: 2.5rem;
+			}
+			.sessions ul {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+			}
+			.sessions li {
+				margin: 0.6rem 0;
+				display: flex;
+				align-items: center;
+				gap: 0.5rem;
+			}
+			.sessions a {
+				text-decoration: none;
+				font-weight: 500;
+			}
+			.sessions a:hover {
+				text-decoration: underline;
+			}
+			.badge {
+				display: inline-block;
+				font-size: 0.72rem;
+				background: #eee;
+				border-radius: 4px;
+				padding: 0.1rem 0.4rem;
+				color: #555;
+				text-transform: capitalize;
+			}
+			@media (max-width: 540px) {
+				.speaker-header {
+					flex-direction: column;
+					align-items: center;
+					text-align: center;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<Header />
+		<main>
+			<a class="back" href="/speakers/">← All speakers</a>
+			<div class="speaker-header">
+				{portraitUrl && (
+					<img src={portraitUrl} alt={name} width={160} height={160} />
+				)}
+				<div>
+					<h1>{name}</h1>
+					{speaker.position && <p class="position">{speaker.position}</p>}
+					<div class="meta">
+						{speaker.company?.name && (
+							<p>
+								{speaker.company.url
+									? <a href={speaker.company.url} target="_blank" rel="noopener">{speaker.company.name}</a>
+									: speaker.company.name
+								}
+							</p>
+						)}
+						{speaker.twitter && (
+							<p>
+								<a href={speaker.twitter} target="_blank" rel="noopener">
+									@{speaker.twitter.replace(/.*(?:twitter|x)\.com\//, '')}
+								</a>
+							</p>
+						)}
+					</div>
+				</div>
+			</div>
+
+			{bioHtml && <div class="bio" set:html={bioHtml} />}
+
+			{speaker.sessions?.length > 0 && (
+				<div class="sessions">
+					<h2>Sessions</h2>
+					<ul>
+						{speaker.sessions.map((s: any) => (
+							<li>
+								<a href={`/sessions/${sanitizeSlug(s.slug.current)}/`}>
+									{s.title}
+								</a>
+								<span class="badge">{s.slotType}</span>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+		</main>
+		<Footer />
+	</body>
+</html>

@@ -1,0 +1,306 @@
+---
+import BaseHead from "../../components/BaseHead.astro";
+import Header from "../../components/Header.astro";
+import Footer from "../../components/Footer.astro";
+import { client, imageUrl, sanitizeSlug } from "../../lib/sanity";
+
+export async function getStaticPaths() {
+	const conferences = await client.fetch(
+		`*[_type == "conference" && defined(slug.current)] {
+			_id, title, slug, website, fromDate, toDate, staticDate, timezone,
+			venue->{ title, address, rooms[]->{ title } },
+			partners[]{ partnerType, source->{ title, partnerLink, logoColor } },
+			stats,
+			"sessions": *[_type == "slot" && ^._id in schedule[].conference._ref] | order(title asc) {
+				title, slug, slotType,
+				speakers[]->{ firstName, lastName, slug }
+			}
+		}`,
+	);
+	return conferences.map((conf: any) => ({
+		params: { slug: conf.slug.current },
+		props: { conf },
+	}));
+}
+
+const { conf } = Astro.props;
+
+function formatDate(d: string): string {
+	return new Date(d).toLocaleDateString("en-GB", { dateStyle: "long" });
+}
+
+const typeOrder = ["talk", "workshop", "course"];
+const typeLabels: Record<string, string> = {
+	talk: "Talks",
+	workshop: "Workshops",
+	course: "Courses",
+};
+const sessionsByType = (conf.sessions ?? []).reduce(
+	(acc: Record<string, any[]>, s: any) => {
+		(acc[s.slotType ?? "talk"] ??= []).push(s);
+		return acc;
+	},
+	{} as Record<string, any[]>,
+);
+const sortedTypes = typeOrder
+	.filter((t) => sessionsByType[t]?.length)
+	.concat(Object.keys(sessionsByType).filter((t) => !typeOrder.includes(t)));
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead
+			title={conf.title}
+			description={`${conf.title} conference details`}
+		/>
+		<style>
+			main {
+				max-width: 900px;
+				margin: 0 auto;
+				padding: 1rem 2rem;
+			}
+			.back {
+				display: inline-block;
+				margin-bottom: 1.5rem;
+				font-size: 0.9rem;
+			}
+			.conf-meta {
+				font-size: 1rem;
+				color: #555;
+				margin-bottom: 2rem;
+				display: flex;
+				flex-direction: column;
+				gap: 0.35rem;
+			}
+			.conf-meta a {
+				color: inherit;
+			}
+			.section {
+				margin-top: 2.5rem;
+			}
+			.section h2 {
+				padding-bottom: 0.4rem;
+				border-bottom: 2px solid #eee;
+				margin-bottom: 1rem;
+			}
+			/* Stats */
+			.stats {
+				display: flex;
+				gap: 2rem;
+				flex-wrap: wrap;
+			}
+			.stat {
+				text-align: center;
+			}
+			.stat .number {
+				font-size: 2rem;
+				font-weight: 700;
+				line-height: 1;
+			}
+			.stat .label {
+				font-size: 0.85rem;
+				color: #666;
+			}
+			/* Partners */
+			.partners {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 1.5rem;
+				align-items: center;
+			}
+			.partner {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				gap: 0.35rem;
+				text-decoration: none;
+				color: inherit;
+				font-size: 0.85rem;
+			}
+			.partner img {
+				max-height: 48px;
+				max-width: 120px;
+				object-fit: contain;
+			}
+			.partner:hover span {
+				text-decoration: underline;
+			}
+			/* Sessions */
+			.session-type {
+				margin-top: 1.5rem;
+			}
+			.session-type h3 {
+				font-size: 1rem;
+				color: #666;
+				text-transform: uppercase;
+				letter-spacing: 0.05em;
+				margin-bottom: 0.5rem;
+			}
+			.sessions {
+				list-style: none;
+				padding: 0;
+				margin: 0;
+			}
+			.sessions li {
+				padding: 0.4rem 0;
+				border-bottom: 1px solid #f0f0f0;
+				font-size: 0.9rem;
+			}
+			.sessions a {
+				text-decoration: none;
+				font-weight: 500;
+			}
+			.sessions a:hover {
+				text-decoration: underline;
+			}
+			.sessions .by {
+				color: #666;
+				font-size: 0.82rem;
+				margin-left: 0.5rem;
+			}
+			/* Venue */
+			address {
+				font-style: normal;
+				line-height: 1.6;
+				color: #555;
+			}
+		</style>
+	</head>
+	<body>
+		<Header />
+		<main>
+			<a class="back" href="/conferences/">← All conferences</a>
+			<h1>{conf.title}</h1>
+
+			<div class="conf-meta">
+				{
+					(conf.staticDate ??
+						(conf.fromDate && conf.toDate
+							? `${formatDate(conf.fromDate)} – ${formatDate(conf.toDate)}`
+							: conf.fromDate
+								? formatDate(conf.fromDate)
+								: null)) && (
+						<span>
+							📅{" "}
+							{conf.staticDate ??
+								(conf.fromDate && conf.toDate
+									? `${formatDate(conf.fromDate)} – ${formatDate(conf.toDate)}`
+									: formatDate(conf.fromDate))}
+							{conf.timezone && ` (${conf.timezone})`}
+						</span>
+					)
+				}
+				{conf.venue?.title && <span>📍 {conf.venue.title}</span>}
+				{
+					conf.venue?.address && (
+						<address>
+							{[
+								conf.venue.address.streetAddress,
+								conf.venue.address.addressLocality,
+								conf.venue.address.postalCode,
+								conf.venue.address.addressCountry,
+							]
+								.filter(Boolean)
+								.join(", ")}
+						</address>
+					)
+				}
+				{
+					conf.website && (
+						<a href={conf.website} target="_blank" rel="noopener">
+							{conf.website}
+						</a>
+					)
+				}
+			</div>
+
+			{
+				conf.stats?.length > 0 && (
+					<div class="section">
+						<div class="stats">
+							{conf.stats.map((s: any) => (
+								<div class="stat">
+									<div class="number">{s.number}</div>
+									<div class="label">{s.label}</div>
+								</div>
+							))}
+						</div>
+					</div>
+				)
+			}
+
+			{
+				conf.partners?.length > 0 && (
+					<div class="section">
+						<h2>Partners</h2>
+						<div class="partners">
+							{conf.partners.map((p: any) => {
+								const logoUrl = imageUrl(p.source?.logoColor, {
+									h: 96,
+									fit: "max",
+								});
+								return (
+									<a
+										class="partner"
+										href={p.source?.partnerLink ?? "#"}
+										target="_blank"
+										rel="noopener"
+									>
+										{logoUrl ? (
+											<img
+												src={logoUrl}
+												alt={p.source?.title ?? ""}
+											/>
+										) : (
+											<span>{p.source?.title}</span>
+										)}
+										{logoUrl && p.source?.title && (
+											<span>{p.source.title}</span>
+										)}
+									</a>
+								);
+							})}
+						</div>
+					</div>
+				)
+			}
+
+			{
+				sortedTypes.length > 0 && (
+					<div class="section">
+						<h2>Sessions</h2>
+						{sortedTypes.map((type) => (
+							<div class="session-type">
+								<h3>{typeLabels[type] ?? type}</h3>
+								<ul class="sessions">
+									{sessionsByType[type].map((s: any) => (
+										<li>
+											<a
+												href={`/sessions/${sanitizeSlug(s.slug.current)}/`}
+											>
+												{s.title}
+											</a>
+											{s.speakers?.length > 0 && (
+												<span class="by">
+													—{" "}
+													{s.speakers
+														.map(
+															(sp: any) =>
+																`${sp.firstName} ${sp.lastName}`,
+														)
+														.join(", ")}
+												</span>
+											)}
+										</li>
+									))}
+								</ul>
+							</div>
+						))}
+					</div>
+				)
+			}
+		</main>
+		<Footer />
+	</body>
+</html>

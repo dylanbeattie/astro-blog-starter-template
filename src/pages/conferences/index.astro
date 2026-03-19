@@ -1,0 +1,113 @@
+---
+import BaseHead from '../../components/BaseHead.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { client } from '../../lib/sanity';
+import { SITE_TITLE } from '../../consts';
+
+const conferences = await client.fetch(
+	`*[_type == "conference"] | order(fromDate desc) {
+		_id, title, slug, website, fromDate, toDate, staticDate,
+		venue->{ title, address }
+	}`
+);
+
+function formatDateRange(from: string, to: string): string {
+	const f = new Date(from);
+	const t = new Date(to);
+	const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', year: 'numeric' };
+	if (from === to) return f.toLocaleDateString('en-GB', opts);
+	if (f.getMonth() === t.getMonth() && f.getFullYear() === t.getFullYear()) {
+		return `${f.getDate()}–${t.toLocaleDateString('en-GB', opts)}`;
+	}
+	return `${f.toLocaleDateString('en-GB', opts)} – ${t.toLocaleDateString('en-GB', opts)}`;
+}
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={`Conferences — ${SITE_TITLE}`} description="All conferences" />
+		<style>
+			main {
+				max-width: 960px;
+				margin: 0 auto;
+				padding: 1rem 2rem;
+			}
+			.list {
+				list-style: none;
+				padding: 0;
+				margin-top: 1.5rem;
+			}
+			.list li {
+				border: 1px solid #e8e8e8;
+				border-radius: 8px;
+				padding: 1rem 1.25rem;
+				margin-bottom: 1rem;
+				transition: box-shadow 0.15s;
+			}
+			.list li:hover {
+				box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+			}
+			.list h2 {
+				margin: 0 0 0.3rem;
+				font-size: 1.2rem;
+			}
+			.list h2 a {
+				text-decoration: none;
+				color: inherit;
+			}
+			.list h2 a:hover {
+				text-decoration: underline;
+			}
+			.meta {
+				font-size: 0.875rem;
+				color: #666;
+			}
+			.meta span + span::before {
+				content: ' · ';
+			}
+			.website {
+				margin-top: 0.35rem;
+				font-size: 0.85rem;
+			}
+		</style>
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>Conferences</h1>
+			<ul class="list">
+				{conferences.map((conf: any) => {
+					const dateStr = conf.staticDate
+						?? (conf.fromDate && conf.toDate
+							? formatDateRange(conf.fromDate, conf.toDate)
+							: conf.fromDate
+								? new Date(conf.fromDate).toLocaleDateString('en-GB', { dateStyle: 'medium' })
+								: '');
+					const city = conf.venue?.address?.addressLocality;
+					const country = conf.venue?.address?.addressCountry;
+					const location = [city, country].filter(Boolean).join(', ');
+					return (
+						<li>
+							<h2>
+								<a href={`/conferences/${conf.slug.current}/`}>{conf.title}</a>
+							</h2>
+							<div class="meta">
+								{dateStr && <span>{dateStr}</span>}
+								{location && <span>{location}</span>}
+								{conf.venue?.title && <span>{conf.venue.title}</span>}
+							</div>
+							{conf.website && (
+								<div class="website">
+									<a href={conf.website} target="_blank" rel="noopener">{conf.website}</a>
+								</div>
+							)}
+						</li>
+					);
+				})}
+			</ul>
+		</main>
+		<Footer />
+	</body>
+</html>
